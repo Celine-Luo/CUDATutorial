@@ -80,6 +80,7 @@ __global__ void FP16GeluCUDAKernel(const __half* x,
   int offset =
       static_cast<int>(threadIdx.x + blockIdx.x * blockDim.x) * VecSize;
   // 循环读取向量的stride
+  // 当数据量n不能被线程总数整除的话，只能被一部分线程处理
   int stride = static_cast<int>(blockDim.x * gridDim.x) * VecSize;
   GeluFunctor<half> gelu_fwd;
   __half y_reg[VecSize];
@@ -123,10 +124,12 @@ int main() {
     cudaDeviceProp deviceProp;
     cudaGetDeviceProperties(&deviceProp, 0);
 
+    // 在进行向量化读写之前，判断 p 是否满足内存对齐的要求
     auto is_aligned = [](const void* p, int alignment) {
         return reinterpret_cast<uintptr_t>(p) % alignment == 0;
     };
-                                                                      
+
+    // 128 / 16 = 8
     constexpr auto kAlignment = alignof(AlignedVector<__half, 8>); 
     // Note: when you have ampere GPU, you can enable the 134-136 line to get performance improvement by half2 intrinsic.
     if (n % 8 == 0 && is_aligned(x, kAlignment) && is_aligned(y, kAlignment)) {                                          
